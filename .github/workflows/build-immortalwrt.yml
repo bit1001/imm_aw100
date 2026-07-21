@@ -49,9 +49,9 @@ jobs:
         run: |
           cd openwrt
           cat >> .config << 'EOF'
-          CONFIG_TARGET_mediatek=y
-          CONFIG_TARGET_mediatek_filogic=y
-          CONFIG_TARGET_mediatek_filogic_DEVICE_openwrt_one=y
+          CONFIG_TARGET_qualcommax=y
+          CONFIG_TARGET_qualcommax_ipq807x=y
+          CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y
           CONFIG_TARGET_ROOTFS_SQUASHFS=y
           CONFIG_PACKAGE_daed=y
           CONFIG_PACKAGE_ca-bundle=y
