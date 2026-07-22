@@ -102,11 +102,13 @@ jobs:
           CONFIG_PACKAGE_lua=y
           CONFIG_PACKAGE_luci-app-daed=y
           CONFIG_PACKAGE_luci-app-qmodem=y
+          CONFIG_PACKAGE_luci-app-qmodem_INCLUDE_generic-qmi-wwan=y
           CONFIG_PACKAGE_luci-app-qmodem-sms=y
           CONFIG_PACKAGE_luci-app-tailscale-community=y
           CONFIG_PACKAGE_luci-compat=y
           CONFIG_PACKAGE_luci-i18n-daed-zh-cn=y
           CONFIG_PACKAGE_luci-i18n-qmodem-zh-cn=y
+          CONFIG_PACKAGE_luci-i18n-qmodem-sms-zh-cn=y
           CONFIG_PACKAGE_luci-i18n-tailscale-community-zh-cn=y
           CONFIG_PACKAGE_luci-lib-base=y
           CONFIG_PACKAGE_luci-lib-ip=y
