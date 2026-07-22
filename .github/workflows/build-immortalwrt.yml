@@ -7,7 +7,7 @@ on:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: master
+  REPO_BRANCH: v25.12.1
 
 jobs:
   build:
@@ -36,8 +36,15 @@ jobs:
         run: |
           git clone ${{ env.REPO_URL }} --depth=1 -b ${{ env.REPO_BRANCH }} openwrt
           cd openwrt
-          echo "src-git daed https://github.com/QiuSimons/DAED" >> feeds.conf.default
-          echo "src-git qmodem https://github.com/FUjr/QModem.git^main" >> feeds.conf.default
+          cat > feeds.conf << 'EOF'
+          src-git packages https://github.com/immortalwrt/packages.git^e93a938c63124832d549c41da3157e2ec40fbe05
+          src-git luci https://github.com/immortalwrt/luci.git^ed7692cb08a953e2e503287e0337c8b548cf4ba5
+          src-git routing https://github.com/openwrt/routing.git^76c933906c616a4cdf865611af0a381787bd87b8
+          src-git telephony https://github.com/openwrt/telephony.git^2618106d5846a4a542fdf5809f0d3ed228ce439b
+          src-git video https://github.com/openwrt/video.git^094bf58da6682f895255a35a84349a79dab4bf95
+          src-git qmodem https://github.com/FUjr/QModem.git^main
+          src-git daed https://github.com/QiuSimons/luci-app-daed
+          EOF
 
       - name: Update & Install Feeds
         run: |
@@ -45,25 +52,80 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Configure Target & Kernel
+      - name: Configure Target & Packages
         run: |
           cd openwrt
-          cat >> .config << 'EOF'
+          cat > .config << 'EOF'
           CONFIG_TARGET_qualcommax=y
           CONFIG_TARGET_qualcommax_ipq807x=y
           CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y
           CONFIG_TARGET_ROOTFS_SQUASHFS=y
-          CONFIG_PACKAGE_daed=y
+          CONFIG_NETKIT=y
+          CONFIG_PACKAGE_bc=y
           CONFIG_PACKAGE_ca-bundle=y
+          CONFIG_PACKAGE_coreutils=y
+          CONFIG_PACKAGE_coreutils-stat=y
+          CONFIG_PACKAGE_daed=y
+          CONFIG_PACKAGE_ip-full=y
+          CONFIG_PACKAGE_jq=y
+          CONFIG_PACKAGE_kmod-mii=y
           CONFIG_PACKAGE_kmod-sched-bpf=y
           CONFIG_PACKAGE_kmod-sched-core=y
+          CONFIG_PACKAGE_kmod-tun=y
+          CONFIG_PACKAGE_kmod-usb-acm=y
+          CONFIG_PACKAGE_kmod-usb-ehci=y
+          CONFIG_PACKAGE_kmod-usb-net=y
+          CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y
+          CONFIG_PACKAGE_kmod-usb-net-cdc-mbim=y
+          CONFIG_PACKAGE_kmod-usb-net-cdc-ncm=y
+          CONFIG_PACKAGE_kmod-usb-net-huawei-cdc-ncm=y
+          CONFIG_PACKAGE_kmod-usb-net-rndis=y
+          CONFIG_PACKAGE_kmod-usb-serial=y
+          CONFIG_PACKAGE_kmod-usb-serial-option=y
+          CONFIG_PACKAGE_kmod-usb-serial-qualcomm=y
+          CONFIG_PACKAGE_kmod-usb-serial-wwan=y
+          CONFIG_PACKAGE_kmod-usb-wdm=y
+          CONFIG_PACKAGE_kmod-usb2=y
           CONFIG_PACKAGE_kmod-veth=y
           CONFIG_PACKAGE_kmod-xdp-sockets-diag=y
-          CONFIG_NETKIT=y
-          CONFIG_PACKAGE_luci-proto-mbim=y
+          CONFIG_PACKAGE_libatomic=y
+          CONFIG_PACKAGE_libbpf=y
+          CONFIG_PACKAGE_libelf=y
+          CONFIG_PACKAGE_libevdev=y
+          CONFIG_PACKAGE_liblua=y
+          CONFIG_PACKAGE_liblucihttp-lua=y
+          CONFIG_PACKAGE_libncurses=y
+          CONFIG_PACKAGE_libreadline=y
+          CONFIG_PACKAGE_libubus-lua=y
+          CONFIG_PACKAGE_libudev-zero=y
+          CONFIG_PACKAGE_libusb-1.0=y
+          CONFIG_PACKAGE_lua=y
+          CONFIG_PACKAGE_luci-app-daed=y
           CONFIG_PACKAGE_luci-app-qmodem=y
           CONFIG_PACKAGE_luci-app-qmodem-sms=y
+          CONFIG_PACKAGE_luci-app-tailscale-community=y
+          CONFIG_PACKAGE_luci-compat=y
+          CONFIG_PACKAGE_luci-i18n-daed-zh-cn=y
           CONFIG_PACKAGE_luci-i18n-qmodem-zh-cn=y
+          CONFIG_PACKAGE_luci-i18n-tailscale-community-zh-cn=y
+          CONFIG_PACKAGE_luci-lib-base=y
+          CONFIG_PACKAGE_luci-lib-ip=y
+          CONFIG_PACKAGE_luci-lib-jsonc=y
+          CONFIG_PACKAGE_luci-lib-nixio=y
+          CONFIG_PACKAGE_luci-lua-runtime=y
+          CONFIG_PACKAGE_luci-proto-mbim=y
+          CONFIG_PACKAGE_modem_scan=y
+          CONFIG_PACKAGE_ndisc6=y
+          CONFIG_PACKAGE_qmodem=y
+          CONFIG_PACKAGE_quectel-CM-5G-M=y
+          CONFIG_PACKAGE_sms-tool_q=y
+          CONFIG_PACKAGE_tailscale=y
+          CONFIG_PACKAGE_terminfo=y
+          CONFIG_PACKAGE_tom_modem=y
+          CONFIG_PACKAGE_ubus-at-daemon=y
+          CONFIG_PACKAGE_ucode-mod-lua=y
+          CONFIG_PACKAGE_usbids=y
+          CONFIG_PACKAGE_usbutils=y
           EOF
           make defconfig
 
@@ -76,7 +138,7 @@ jobs:
       - name: Build Firmware
         run: |
           cd openwrt
-          make -j2 2>&1 || make -j1 V=s 2>&1
+          make -j$(nproc) 2>&1 || make -j1 V=s 2>&1
 
       - name: Upload Firmware
         uses: actions/upload-artifact@v4
