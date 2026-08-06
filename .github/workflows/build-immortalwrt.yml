@@ -69,6 +69,7 @@ jobs:
           CONFIG_PACKAGE_ip-full=y
           CONFIG_PACKAGE_jq=y
           CONFIG_PACKAGE_kmod-mii=y
+          CONFIG_PACKAGE_kmod-nft-bridge=y
           CONFIG_PACKAGE_kmod-sched-bpf=y
           CONFIG_PACKAGE_kmod-sched-core=y
           CONFIG_PACKAGE_kmod-tun=y
