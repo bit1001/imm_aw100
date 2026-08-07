@@ -60,6 +60,10 @@ jobs:
           CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y
           CONFIG_TARGET_ROOTFS_SQUASHFS=y
           CONFIG_NETKIT=y
+          CONFIG_KERNEL_DEBUG_INFO=y
+          CONFIG_KERNEL_DEBUG_INFO_BTF=y
+          CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y
+          CONFIG_KERNEL_XDP_SOCKETS=y
           CONFIG_PACKAGE_bc=y
           CONFIG_PACKAGE_ca-bundle=y
           CONFIG_PACKAGE_coreutils=y
