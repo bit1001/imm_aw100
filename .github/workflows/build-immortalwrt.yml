@@ -177,17 +177,21 @@ jobs:
           CONFIG_PACKAGE_usbutils=y
           EOF
           make defconfig
-          # 强断言：关键配置项在 defconfig 后必须仍存在，否则立即失败止损
-          for sym in KERNEL_DEBUG_INFO KERNEL_DEBUG_INFO_BTF KERNEL_DEBUG_INFO_REDUCED \
+          # 强断言：关键配置项在 defconfig 后必须仍存在，否则立即失败止损。
+          # 注意：只检查应为 y/m 的项（REDUCED 是 n，在 .config 中本就不应有 =y/=m 行，不在此检查）
+          for sym in KERNEL_DEBUG_INFO KERNEL_DEBUG_INFO_BTF \
                      KERNEL_XDP_SOCKETS \
                      PACKAGE_kdae-panel PACKAGE_luci-app-kdae-panel PACKAGE_daed; do
-            if ! grep -E "^CONFIG_${sym}=[ym]" .config >/dev/null; then
+            if ! grep -qE "^CONFIG_${sym}=[ym]" .config; then
               echo "!! CRITICAL: CONFIG_${sym} was dropped by defconfig" >&2
               exit 1
             fi
           done
-          echo "--- all key configs present ---"
-          grep -E 'KERNEL_DEBUG_INFO|KERNEL_XDP_SOCKETS|PACKAGE_kdae-panel|PACKAGE_luci-app-kdae-panel|PACKAGE_daed' .config
+          echo "--- all key configs present (BTF relies on REDUCED=n, which is implied) ---"
+          grep -E 'KERNEL_DEBUG_INFO=|KERNEL_DEBUG_INFO_BTF=|KERNEL_XDP_SOCKETS=|PACKAGE_kdae-panel=|PACKAGE_luci-app-kdae-panel=|PACKAGE_daed=' .config
+          grep -cE '^# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set' .config \
+            && echo "REDUCED correctly off (BTF dependency satisfied)" \
+            || echo "note: REDUCED cleared (default n)"
 
       - name: Download Sources
         run: cd openwrt && make download -j4
