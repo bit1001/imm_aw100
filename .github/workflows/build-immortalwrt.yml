@@ -96,12 +96,16 @@ jobs:
           CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y
           CONFIG_TARGET_ROOTFS_SQUASHFS=y
           CONFIG_NETKIT=y
+          # ---- BTF/XDP for dae/daed/kdae-panel CO-RE ----
+          # 关键：DEBUG_INFO_BTF 依赖 (KERNEL_DEBUG_INFO && !KERNEL_DEBUG_INFO_REDUCED)
+          # 而 qualcommax_ipq807x 不在 OpenWrt 默认启用 BTF 的 target 豁免列表，导致
+          # KERNEL_DEBUG_INFO_REDUCED 默认=y，从而 BTF 被 defconfig 静默丢弃。
+          # 必须显式 REDUCED=n 才能让 BTF 通过依赖链。
           CONFIG_KERNEL_DEBUG_INFO=y
+          CONFIG_KERNEL_DEBUG_INFO_REDUCED=n
           CONFIG_KERNEL_DEBUG_INFO_BTF=y
           CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y
           CONFIG_KERNEL_XDP_SOCKETS=y
-          CONFIG_KERNEL_IKCONFIG=y
-          CONFIG_KERNEL_IKCONFIG_PROC=y
           CONFIG_PACKAGE_bc=y
           CONFIG_PACKAGE_ca-bundle=y
           CONFIG_PACKAGE_coreutils=y
@@ -173,8 +177,9 @@ jobs:
           CONFIG_PACKAGE_usbutils=y
           EOF
           make defconfig
-          # 强断言：这些关键配置项在 defconfig 后必须仍存在，否则立即失败止损（避免拖到编译期才发现）
-          for sym in KERNEL_DEBUG_INFO_BTF KERNEL_XDP_SOCKETS KERNEL_IKCONFIG_PROC \
+          # 强断言：关键配置项在 defconfig 后必须仍存在，否则立即失败止损
+          for sym in KERNEL_DEBUG_INFO KERNEL_DEBUG_INFO_BTF KERNEL_DEBUG_INFO_REDUCED \
+                     KERNEL_XDP_SOCKETS \
                      PACKAGE_kdae-panel PACKAGE_luci-app-kdae-panel PACKAGE_daed; do
             if ! grep -E "^CONFIG_${sym}=[ym]" .config >/dev/null; then
               echo "!! CRITICAL: CONFIG_${sym} was dropped by defconfig" >&2
@@ -182,7 +187,7 @@ jobs:
             fi
           done
           echo "--- all key configs present ---"
-          grep -E 'KERNEL_DEBUG_INFO_BTF|KERNEL_XDP_SOCKETS|KERNEL_IKCONFIG|PACKAGE_kdae-panel|PACKAGE_luci-app-kdae-panel|PACKAGE_daed' .config
+          grep -E 'KERNEL_DEBUG_INFO|KERNEL_XDP_SOCKETS|PACKAGE_kdae-panel|PACKAGE_luci-app-kdae-panel|PACKAGE_daed' .config
 
       - name: Download Sources
         run: cd openwrt && make download -j4
