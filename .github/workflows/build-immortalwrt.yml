@@ -1,4 +1,4 @@
-name: Build ImmortalWrt for aw1000
+name: Build ImmortalWrt for aw1000 (with BTF/XDP for dae+daed+kdae-panel)
 
 on:
   workflow_dispatch:
@@ -8,6 +8,8 @@ on:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: v25.12.1
+  KDAE_PANEL_REPO: https://github.com/senshinya/luci-app-kdae-panel.git
+  KDAE_PANEL_COMMIT: f64794be291172cd89f828f83e2f9fcc09c6249e
 
 jobs:
   build:
@@ -22,7 +24,9 @@ jobs:
           sudo apt-get install -y build-essential clang flex bison g++ gawk \
             gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
             python3-setuptools rsync swig curl wget file unzip zlib1g-dev \
-            libelf-dev libudev-dev cmake ccache
+            libelf-dev libudev-dev cmake ccache dwarves
+          # dwarves 提供 pahole —— 生成内核 BTF 段必需，缺它 DEBUG_INFO_BTF 不会真正生效
+          command -v pahole && pahole --version || echo "WARN: pahole not found"
           free -h; df -h /
           sudo swapoff -a 2>/dev/null; sleep 1
           SWAPFILE="$(mktemp -p /tmp -u).swap"
@@ -32,23 +36,54 @@ jobs:
           sudo swapon "$SWAPFILE"
           free -h
 
-      - name: Clone ImmortalWrt
+      - name: Set up Go (for kdae-panel cross-compile)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      - name: Clone ImmortalWrt and pin feeds
         run: |
           git clone ${{ env.REPO_URL }} --depth=1 -b ${{ env.REPO_BRANCH }} openwrt
-          cd openwrt
-          cat > feeds.conf << 'EOF'
+          # base/luci feeds pinned to matching immortalwrt v25.12.1 commits
+          cat > openwrt/feeds.conf << 'EOF'
           src-git packages https://github.com/immortalwrt/packages.git^e93a938c63124832d549c41da3157e2ec40fbe05
           src-git luci https://github.com/immortalwrt/luci.git^ed7692cb08a953e2e503287e0337c8b548cf4ba5
           src-git routing https://github.com/openwrt/routing.git^76c933906c616a4cdf865611af0a381787bd87b8
           src-git telephony https://github.com/openwrt/telephony.git^2618106d5846a4a542fdf5809f0d3ed228ce439b
           src-git video https://github.com/openwrt/video.git^094bf58da6682f895255a35a84349a79dab4bf95
           src-git qmodem https://github.com/FUjr/QModem.git^main
-          src-git daed https://github.com/QiuSimons/luci-app-daed
+          src-git daed https://github.com/QiuSimons/luci-app-daed.git^kix
           EOF
+
+      - name: Prepare kdae-panel (cross-compile binary + register feed)
+        env:
+          KDAE_PANEL_COMMIT: f64794be291172cd89f828f83e2f9fcc09c6249e
+        run: |
+          set -e
+          # 1. Download kdae-panel source repo (its openwrt/ dir holds the OpenWrt packages)
+          git clone --depth=1 https://github.com/senshinya/luci-app-kdae-panel.git /tmp/kdae-panel
+          cd /tmp/kdae-panel
+          git fetch origin "$KDAE_PANEL_COMMIT" 2>/dev/null && git checkout FETCH_HEAD \
+            || echo "WARN: cannot pin to exact sha, using default branch HEAD"
+          # 2. Cross-compile a static arm64 (aarch64) binary - the OpenWrt package requires KDAE_PANEL_BIN
+          KPA_VERSION="$(sh scripts/panel-version.sh 2>/dev/null || echo 1.1.0)"
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+            -trimpath \
+            -ldflags "-s -w -X main.version=${KPA_VERSION}" \
+            -o /tmp/kdae-panel-bin \
+            ./cmd/kdae-panel
+          file /tmp/kdae-panel-bin || ls -la /tmp/kdae-panel-bin
+          # 3. (src-link 注册统一放到 Update & Install Feeds 步骤，在 openwrt 目录内执行)
+
+      - name: Export KDAE_PANEL_BIN to build env
+        run: echo "KDAE_PANEL_BIN=/tmp/kdae-panel-bin" >> "$GITHUB_ENV"
 
       - name: Update & Install Feeds
         run: |
           cd openwrt
+          # append src-link after feeds.conf is present (relative to openwrt dir)
+          echo "src-link kdae /tmp/kdae-panel/openwrt" >> feeds.conf
+          cat feeds.conf
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
@@ -61,11 +96,19 @@ jobs:
           CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y
           CONFIG_TARGET_ROOTFS_SQUASHFS=y
           CONFIG_NETKIT=y
+          CONFIG_KERNEL_DEBUG_INFO=y
+          CONFIG_KERNEL_DEBUG_INFO_BTF=y
+          CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y
+          CONFIG_KERNEL_XDP_SOCKETS=y
+          CONFIG_KERNEL_IKCONFIG=y
+          CONFIG_KERNEL_IKCONFIG_PROC=y
           CONFIG_PACKAGE_bc=y
           CONFIG_PACKAGE_ca-bundle=y
           CONFIG_PACKAGE_coreutils=y
           CONFIG_PACKAGE_coreutils-stat=y
           CONFIG_PACKAGE_daed=y
+          CONFIG_PACKAGE_kdae-panel=y
+          CONFIG_PACKAGE_luci-app-kdae-panel=y
           CONFIG_PACKAGE_ip-full=y
           CONFIG_PACKAGE_jq=y
           CONFIG_PACKAGE_kmod-mii=y
@@ -130,6 +173,16 @@ jobs:
           CONFIG_PACKAGE_usbutils=y
           EOF
           make defconfig
+          # 强断言：这些关键配置项在 defconfig 后必须仍存在，否则立即失败止损（避免拖到编译期才发现）
+          for sym in KERNEL_DEBUG_INFO_BTF KERNEL_XDP_SOCKETS KERNEL_IKCONFIG_PROC \
+                     PACKAGE_kdae-panel PACKAGE_luci-app-kdae-panel PACKAGE_daed; do
+            if ! grep -E "^CONFIG_${sym}=[ym]" .config >/dev/null; then
+              echo "!! CRITICAL: CONFIG_${sym} was dropped by defconfig" >&2
+              exit 1
+            fi
+          done
+          echo "--- all key configs present ---"
+          grep -E 'KERNEL_DEBUG_INFO_BTF|KERNEL_XDP_SOCKETS|KERNEL_IKCONFIG|PACKAGE_kdae-panel|PACKAGE_luci-app-kdae-panel|PACKAGE_daed' .config
 
       - name: Download Sources
         run: cd openwrt && make download -j4
